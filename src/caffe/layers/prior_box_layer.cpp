@@ -2,7 +2,7 @@
 #include <functional>
 #include <utility>
 #include <vector>
-
+#include <math.h>
 #include "caffe/layers/prior_box_layer.hpp"
 
 namespace caffe {
@@ -12,11 +12,33 @@ void PriorBoxLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
   const PriorBoxParameter& prior_box_param =
       this->layer_param_.prior_box_param();
-  CHECK_GT(prior_box_param.min_size_size(), 0) << "must provide min_size.";
-  for (int i = 0; i < prior_box_param.min_size_size(); ++i) {
-    min_sizes_.push_back(prior_box_param.min_size(i));
-    CHECK_GT(min_sizes_.back(), 0) << "min_size must be positive.";
+  // CHECK_GT(prior_box_param.min_size_size(), 0) << "must provide min_size.";
+  if (prior_box_param.min_size_size()>0){
+    for (int i = 0; i < prior_box_param.min_size_size(); ++i) {
+      min_sizes_.push_back(prior_box_param.min_size(i));
+      CHECK_GT(min_sizes_.back(), 0) << "min_size must be positive.";
+    }
   }
+
+  if (prior_box_param.fixed_size_size()>0){
+    for (int i = 0; i < prior_box_param.fixed_size_size(); ++i) {
+      fixed_sizes_.push_back(prior_box_param.fixed_size(i));
+      CHECK_GT(fixed_sizes_.back(), 0) << "fixed_size must be positive.";
+      CHECK_GT(prior_box_param.density_size(),0) << "if use fixed_size then you must provide density";
+    }
+  }
+  
+  if (prior_box_param.fixed_ratio_size()>0){
+    CHECK_EQ(0,prior_box_param.aspect_ratio_size()) << "can not provide fixed_ratio and aspect_ratio simultaneously.";
+  }
+
+
+  fixed_ratios_.clear();
+  for(int i=0; i < prior_box_param.fixed_ratio_size(); ++i){
+    float ar = prior_box_param.fixed_ratio(i);
+    fixed_ratios_.push_back(ar);
+  }
+
   aspect_ratios_.clear();
   aspect_ratios_.push_back(1.);
   flip_ = prior_box_param.flip();
@@ -36,16 +58,37 @@ void PriorBoxLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       }
     }
   }
-  num_priors_ = aspect_ratios_.size() * min_sizes_.size();
-  if (prior_box_param.max_size_size() > 0) {
+
+  if (min_sizes_.size()>0){
+    num_priors_ = aspect_ratios_.size() * min_sizes_.size();
+  }
+
+  if (fixed_sizes_.size()>0){
+    num_priors_ = aspect_ratios_.size() * fixed_sizes_.size();
+  }
+
+  if(prior_box_param.density_size() > 0) {
+    for(int i=0;i<prior_box_param.density_size();++i){
+      densitys_.push_back(prior_box_param.density(i));
+      CHECK_GT(densitys_.back(), 0) << "density must be positive.";
+      if (prior_box_param.fixed_ratio_size()>0){
+        num_priors_ += (fixed_ratios_.size()) * (pow(densitys_[i],2)-1);
+      }else{
+        num_priors_ += (aspect_ratios_.size()) * (pow(densitys_[i],2)-1);
+      }
+    } 
+  }
+
+  if(prior_box_param.max_size_size() > 0) {
     CHECK_EQ(prior_box_param.min_size_size(), prior_box_param.max_size_size());
     for (int i = 0; i < prior_box_param.max_size_size(); ++i) {
       max_sizes_.push_back(prior_box_param.max_size(i));
       CHECK_GT(max_sizes_[i], min_sizes_[i])
-          << "max_size must be greater than min_size.";
+          << "max_size must be greater than min_size."; 
       num_priors_ += 1;
     }
   }
+
   clip_ = prior_box_param.clip();
   if (prior_box_param.variance_size() > 1) {
     // Must and only provide 4 variance.
@@ -145,6 +188,83 @@ void PriorBoxLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       float center_x = (w + offset_) * step_w;
       float center_y = (h + offset_) * step_h;
       float box_width, box_height;
+
+      for (int s = 0; s < fixed_sizes_.size(); ++s) {
+        int fixed_size_ = fixed_sizes_[s];
+        box_width = box_height = fixed_size_;
+
+        if(fixed_ratios_.size()>0){
+          for (int r = 0; r < fixed_ratios_.size(); ++r) {
+            float ar = fixed_ratios_[r];
+            int density_ = densitys_[s]; 
+            int shift = fixed_sizes_[s] / density_;
+            float box_width_ratio = fixed_sizes_[s] * sqrt(ar);
+            float box_height_ratio = fixed_sizes_[s] / sqrt(ar);
+            for (int r = 0 ; r < density_ ; ++r){
+              for (int c = 0 ; c < density_ ; ++c){
+                float center_x_temp = center_x - fixed_size_ / 2 + shift/2. + c*shift;
+                float center_y_temp = center_y - fixed_size_ / 2 + shift/2. + r*shift;
+                // xmin
+                top_data[idx++] = (center_x_temp - box_width_ratio / 2.) / img_width >=0 ? (center_x_temp - box_width_ratio / 2.) / img_width : 0 ;
+                // ymin
+                top_data[idx++] = (center_y_temp - box_height_ratio / 2.) / img_height >= 0 ? (center_y_temp - box_height_ratio / 2.) / img_height : 0;
+                // xmax
+                top_data[idx++] = (center_x_temp + box_width_ratio / 2.) / img_width <= 1 ? (center_x_temp + box_width_ratio / 2.) / img_width : 1;
+                // ymax
+                top_data[idx++] = (center_y_temp + box_height_ratio / 2.) / img_height <= 1 ? (center_y_temp + box_height_ratio / 2.) / img_height : 1;
+              }
+            }
+          }
+        }
+        else {
+          //this code added by gaozhihua for density anchor box
+          if (densitys_.size() > 0) {
+            CHECK_EQ(fixed_sizes_.size(),densitys_.size());
+            int density_ = densitys_[s]; 
+            int shift = fixed_sizes_[s] / density_;
+            for (int r = 0 ; r < density_ ; ++r){
+              for (int c = 0 ; c < density_ ; ++c){
+                float center_x_temp = center_x - fixed_size_ / 2 + shift/2. + c*shift;
+                float center_y_temp = center_y - fixed_size_ / 2 + shift/2. + r*shift;
+                // xmin
+                top_data[idx++] = (center_x_temp - box_width / 2.) / img_width >=0 ? (center_x_temp - box_width / 2.) / img_width : 0 ;
+                // ymin
+                top_data[idx++] = (center_y_temp - box_height / 2.) / img_height >= 0 ? (center_y_temp - box_height / 2.) / img_height : 0;
+                // xmax
+                top_data[idx++] = (center_x_temp + box_width / 2.) / img_width <= 1 ? (center_x_temp + box_width / 2.) / img_width : 1;
+                // ymax
+                top_data[idx++] = (center_y_temp + box_height / 2.) / img_height <= 1 ? (center_y_temp + box_height / 2.) / img_height : 1;
+              }
+            }
+          }
+          //rest of priors
+          for (int r = 0; r < aspect_ratios_.size(); ++r) {
+            float ar = aspect_ratios_[r];
+            if (fabs(ar - 1.) < 1e-6) {
+              continue;
+            }
+            int density_ = densitys_[s]; 
+            int shift = fixed_sizes_[s] / density_;
+            float box_width_ratio = fixed_sizes_[s] * sqrt(ar);
+            float box_height_ratio = fixed_sizes_[s] / sqrt(ar);
+            for (int r = 0 ; r < density_ ; ++r){
+              for (int c = 0 ; c < density_ ; ++c){
+                float center_x_temp = center_x - fixed_size_ / 2 + shift/2. + c*shift;
+                float center_y_temp = center_y - fixed_size_ / 2 + shift/2. + r*shift;
+                // xmin
+                top_data[idx++] = (center_x_temp - box_width_ratio / 2.) / img_width >=0 ? (center_x_temp - box_width_ratio / 2.) / img_width : 0 ;
+                // ymin
+                top_data[idx++] = (center_y_temp - box_height_ratio / 2.) / img_height >= 0 ? (center_y_temp - box_height_ratio / 2.) / img_height : 0;
+                // xmax
+                top_data[idx++] = (center_x_temp + box_width_ratio / 2.) / img_width <= 1 ? (center_x_temp + box_width_ratio / 2.) / img_width : 1;
+                // ymax
+                top_data[idx++] = (center_y_temp + box_height_ratio / 2.) / img_height <= 1 ? (center_y_temp + box_height_ratio / 2.) / img_height : 1;
+              }
+            }
+          }
+        }
+      }
+
       for (int s = 0; s < min_sizes_.size(); ++s) {
         int min_size_ = min_sizes_[s];
         // first prior: aspect_ratio = 1, size = min_size
