@@ -67,3 +67,11 @@ cd caffe
 
 >> 效果图：<br>
 ![demo](https://github.com/lippman1125/github_images/blob/master/faceboxes_images/img_demo.jpg)
+
+5. 参考：<br>
+---
+>>参考的仓库：https://github.com/lsy17096535/faceboxes
+
+6. 优化：<br>
+---
+>>train.prototxt支持Anchor densification strategy
