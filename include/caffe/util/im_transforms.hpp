@@ -16,7 +16,7 @@ namespace caffe {
 // Generate random number given the probablities for each number.
 int roll_weighted_die(const std::vector<float>& probabilities);
 
-void UpdateBBoxByResizePolicy(const ResizeParameter& param,
+int UpdateBBoxByResizePolicy(const ResizeParameter& param,
                               const int old_width, const int old_height,
                               NormalizedBBox* bbox);
 

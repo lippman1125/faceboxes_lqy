@@ -103,8 +103,12 @@ void SampleBBox(const Sampler& sampler, NormalizedBBox* sampled_bbox) {
   aspect_ratio = std::min<float>(aspect_ratio, 1 / std::pow(scale, 2.));
 
   // Figure out bbox dimension.
-  float bbox_width = scale * sqrt(aspect_ratio);
-  float bbox_height = scale / sqrt(aspect_ratio);
+  //float bbox_width = scale * sqrt(aspect_ratio);
+  //float bbox_height = scale / sqrt(aspect_ratio);
+
+  float bbox_width = scale;
+  float bbox_height = scale;
+ 
 
   // Figure out top left coordinates.
   float w_off, h_off;

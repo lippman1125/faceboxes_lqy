@@ -289,6 +289,9 @@ void DataTransformer<Dtype>::TransformAnnotation(
   const int img_width = anno_datum.datum().width();
   if (anno_datum.type() == AnnotatedDatum_AnnotationType_BBOX) {
     // Go through each AnnotationGroup.
+    //lqy
+    //std::cout << "annotation_group_size: " << anno_datum.annotation_group_size() << std::endl;
+    //std::cout <<"crop_xmin " << crop_bbox.xmin() << " crop_ymin " << crop_bbox.ymin() << " crop_xmax " << crop_bbox.xmax() << " crop_ymax " << crop_bbox.ymax() <<std::endl;
     for (int g = 0; g < anno_datum.annotation_group_size(); ++g) {
       const AnnotationGroup& anno_group = anno_datum.annotation_group(g);
       AnnotationGroup transformed_anno_group;
@@ -302,8 +305,10 @@ void DataTransformer<Dtype>::TransformAnnotation(
         if (do_resize && param_.has_resize_param()) {
           CHECK_GT(img_height, 0);
           CHECK_GT(img_width, 0);
-          UpdateBBoxByResizePolicy(param_.resize_param(), img_width, img_height,
-                                   &resize_bbox);
+          if (UpdateBBoxByResizePolicy(param_.resize_param(), img_width, img_height, &resize_bbox)) {
+              //std::cout << "bbox is too small" << std::endl;
+              continue;
+          }
         }
         if (param_.has_emit_constraint() &&
             !MeetEmitConstraint(crop_bbox, resize_bbox,

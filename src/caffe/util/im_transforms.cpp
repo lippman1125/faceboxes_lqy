@@ -37,7 +37,7 @@ int roll_weighted_die(const vector<float>& probabilities) {
           - cumulative.begin());
 }
 
-void UpdateBBoxByResizePolicy(const ResizeParameter& param,
+int UpdateBBoxByResizePolicy(const ResizeParameter& param,
                               const int old_width, const int old_height,
                               NormalizedBBox* bbox) {
   float new_height = param.height();
@@ -90,10 +90,17 @@ void UpdateBBoxByResizePolicy(const ResizeParameter& param,
     default:
       LOG(FATAL) << "Unknown resize mode.";
   }
+  if (x_max - x_min < 20 || y_max - y_min < 20) {
+      //std::cout << "x_min: " << x_min << " " << "y_min: " << y_min << " " << "x_max: " << x_max << " " << "y_max: " << y_max << std::endl;
+      //std::cout << "new_w: " << new_width << "new_h: " << new_height << std::endl;
+      return 1;
+  }
   bbox->set_xmin(x_min / new_width);
   bbox->set_ymin(y_min / new_height);
   bbox->set_xmax(x_max / new_width);
   bbox->set_ymax(y_max / new_height);
+
+  return 0;
 }
 
 void InferNewSize(const ResizeParameter& resize_param,

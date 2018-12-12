@@ -145,6 +145,8 @@ void AnnotatedDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
   int num_bboxes = 0;
 
   for (int item_id = 0; item_id < batch_size; ++item_id) {
+    //lqy
+    //std::cout << "item_id: " << item_id << std::endl;
     timer.Start();
     // get a anno_datum
     AnnotatedDatum& anno_datum = *(reader_.full().pop("Waiting for data"));
@@ -231,6 +233,7 @@ void AnnotatedDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
           // Count the number of bboxes.
           for (int g = 0; g < transformed_anno_vec.size(); ++g) {
             num_bboxes += transformed_anno_vec[g].annotation_size();
+            //std::cout << "num_bboxes: " << num_bboxes << std::endl;
           }
         } else {
           LOG(FATAL) << "Unknown annotation type.";
@@ -292,6 +295,8 @@ void AnnotatedDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
               top_label[idx++] = bbox.xmax();
               top_label[idx++] = bbox.ymax();
               top_label[idx++] = bbox.difficult();
+              // std::cout << "pic " << item_id <<" label " << anno_group.group_label() << " id " << anno.instance_id() << std::endl;
+              // std::cout << "x0 " << bbox.xmin()*1024 << " y0 " << bbox.ymin()*1024 << " x1 " << bbox.xmax()*1024 << " y1 " << bbox.ymax()*1024 << std::endl;
             }
           }
         }
